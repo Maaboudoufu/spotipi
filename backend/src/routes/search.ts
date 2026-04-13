@@ -15,7 +15,7 @@ router.get("/", requireAuth, requireRole("admin", "dj"), async (req: Request, re
     const params = new URLSearchParams({
       q,
       type: "track,artist,album",
-      limit: "20",
+      limit: "10",
     });
     const results = await spotifyApi(`/search?${params.toString()}`);
     res.json(results);
