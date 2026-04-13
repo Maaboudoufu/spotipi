@@ -12,9 +12,12 @@ router.get("/", requireAuth, requireRole("admin", "dj"), async (req: Request, re
   }
 
   try {
-    const results = await spotifyApi(
-      `/search?q=${encodeURIComponent(q)}&type=track,artist,album&limit=20`
-    );
+    const params = new URLSearchParams({
+      q,
+      type: "track,artist,album",
+      limit: "20",
+    });
+    const results = await spotifyApi(`/search?${params.toString()}`);
     res.json(results);
   } catch (err: any) {
     res.status(502).json({ error: err.message });
