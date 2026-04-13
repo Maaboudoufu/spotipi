@@ -23,7 +23,7 @@ router.post("/login", async (req: Request, res: Response) => {
     await logAudit({
       action: "login_failure",
       metadata: { username },
-      ipAddress: req.ip,
+      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
     });
     res.status(401).json({ error: "Invalid credentials" });
     return;
@@ -36,13 +36,13 @@ router.post("/login", async (req: Request, res: Response) => {
       action: "login_failure",
       targetType: "user",
       targetId: user.id,
-      ipAddress: req.ip,
+      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
     });
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
 
-  const session = await createSession(user.id, req.ip, req.get("user-agent"));
+  const session = await createSession(user.id, Array.isArray(req.ip) ? req.ip[0] : req.ip, req.get("user-agent"));
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
   await logAudit({
@@ -50,7 +50,7 @@ router.post("/login", async (req: Request, res: Response) => {
     action: "login_success",
     targetType: "user",
     targetId: user.id,
-    ipAddress: req.ip,
+    ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
   });
 
   res.cookie("session_id", session.id, {
@@ -76,7 +76,7 @@ router.post("/logout", requireAuth, async (req: Request, res: Response) => {
     await logAudit({
       actorUserId: req.currentUser!.id,
       action: "logout",
-      ipAddress: req.ip,
+      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
     });
   }
   res.clearCookie("session_id", { path: "/" });

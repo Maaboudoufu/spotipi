@@ -36,7 +36,7 @@ router.post("/", async (req: Request, res: Response) => {
       targetType: "user",
       targetId: user.id,
       metadata: { username, roles: roles || ["viewer"] },
-      ipAddress: req.ip,
+      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
     });
     res.status(201).json({
       user: {
@@ -55,15 +55,16 @@ router.post("/", async (req: Request, res: Response) => {
 });
 
 router.patch("/:id", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
   const { username, isActive } = req.body;
-  const user = await updateUser(req.params.id, { username, isActive });
+  const user = await updateUser(id, { username, isActive });
   await logAudit({
     actorUserId: req.currentUser!.id,
     action: "user_updated",
     targetType: "user",
-    targetId: req.params.id,
+    targetId: id,
     metadata: { username, isActive },
-    ipAddress: req.ip,
+    ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
   });
   res.json({
     user: {
@@ -76,36 +77,38 @@ router.patch("/:id", async (req: Request, res: Response) => {
 });
 
 router.patch("/:id/roles", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
   const { roles } = req.body;
   if (!Array.isArray(roles)) {
     res.status(400).json({ error: "roles must be an array" });
     return;
   }
-  const user = await setUserRoles(req.params.id, roles);
+  const user = await setUserRoles(id, roles);
   await logAudit({
     actorUserId: req.currentUser!.id,
     action: "role_changed",
     targetType: "user",
-    targetId: req.params.id,
+    targetId: id,
     metadata: { roles },
-    ipAddress: req.ip,
+    ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
   });
   res.json({ user });
 });
 
 router.post("/:id/reset-password", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
   const { password } = req.body;
   if (!password) {
     res.status(400).json({ error: "Password required" });
     return;
   }
-  await resetUserPassword(req.params.id, password);
+  await resetUserPassword(id, password);
   await logAudit({
     actorUserId: req.currentUser!.id,
     action: "password_reset",
     targetType: "user",
-    targetId: req.params.id,
-    ipAddress: req.ip,
+    targetId: id,
+    ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
   });
   res.json({ ok: true });
 });

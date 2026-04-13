@@ -27,7 +27,7 @@ router.post("/play", requireRole("admin", "dj"), async (req: Request, res: Respo
       actorUserId: req.currentUser!.id,
       action: "play",
       metadata: req.body.uri ? { uri: req.body.uri } : undefined,
-      ipAddress: req.ip,
+      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
     });
     res.json({ ok: true });
   } catch (err: any) {
@@ -41,7 +41,7 @@ router.post("/pause", requireRole("admin", "dj"), async (req: Request, res: Resp
     await logAudit({
       actorUserId: req.currentUser!.id,
       action: "pause",
-      ipAddress: req.ip,
+      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
     });
     res.json({ ok: true });
   } catch (err: any) {
@@ -55,7 +55,7 @@ router.post("/next", requireRole("admin", "dj"), async (req: Request, res: Respo
     await logAudit({
       actorUserId: req.currentUser!.id,
       action: "skip_next",
-      ipAddress: req.ip,
+      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
     });
     res.json({ ok: true });
   } catch (err: any) {
@@ -69,7 +69,7 @@ router.post("/previous", requireRole("admin", "dj"), async (req: Request, res: R
     await logAudit({
       actorUserId: req.currentUser!.id,
       action: "skip_previous",
-      ipAddress: req.ip,
+      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
     });
     res.json({ ok: true });
   } catch (err: any) {
@@ -89,7 +89,7 @@ router.post("/queue", requireRole("admin", "dj"), async (req: Request, res: Resp
       actorUserId: req.currentUser!.id,
       action: "queue_add",
       metadata: { uri },
-      ipAddress: req.ip,
+      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
     });
     res.json({ ok: true });
   } catch (err: any) {

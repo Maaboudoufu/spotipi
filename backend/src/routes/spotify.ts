@@ -61,7 +61,7 @@ router.post("/disconnect", requireAuth, requireRole("admin"), async (req: Reques
   await logAudit({
     actorUserId: req.currentUser!.id,
     action: "spotify_disconnected",
-    ipAddress: req.ip,
+    ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
   });
   res.json({ ok: true });
 });
