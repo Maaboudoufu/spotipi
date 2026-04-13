@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  username     String    @unique
+  passwordHash String    @map("password_hash")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  lastLoginAt  DateTime? @map("last_login_at")
+
+  userRoles UserRole[]
+  sessions  Session[]
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+model Role {
+  id   String @id @default(uuid())
+  name String @unique
+
+  userRoles UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId String @map("user_id")
+  roleId String @map("role_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Session {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  expiresAt DateTime  @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  revokedAt DateTime? @map("revoked_at")
+  ipAddress String?   @map("ip_address")
+  userAgent String?   @map("user_agent")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorUserId  String?  @map("actor_user_id")
+  action       String
+  targetType   String?  @map("target_type")
+  targetId     String?  @map("target_id")
+  metadataJson String?  @map("metadata_json")
+  createdAt    DateTime @default(now()) @map("created_at")
+  ipAddress    String?  @map("ip_address")
+
+  actorUser User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+model SpotifyConnection {
+  id                  String   @id @default(uuid())
+  accountLabel        String   @default("main") @map("account_label")
+  spotifyUserId       String?  @map("spotify_user_id")
+  accessTokenEncrypted  String @map("access_token_encrypted")
+  refreshTokenEncrypted String @map("refresh_token_encrypted")
+  tokenExpiresAt      DateTime @map("token_expires_at")
+  scope               String?
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("spotify_connection")
+}
