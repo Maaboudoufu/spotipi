@@ -30,7 +30,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <div className="flex items-center justify-between h-16">
             {/* Logo + brand */}
             <Link to="/app" className="flex items-center gap-3">
-              <img src="/sce_logo.jpg" alt="SCE" className="h-9 w-9 rounded" />
+              <img src="/sce_logo.ico" alt="SCE" className="h-9 w-9 rounded" />
               <span className="text-white font-semibold text-lg tracking-tight">
                 SpotiPi
               </span>

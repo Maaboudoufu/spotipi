@@ -26,7 +26,7 @@ export default function LoginPage() {
       {/* Top bar matching SCE site */}
       <nav className="flex items-center justify-between px-8 py-4">
         <div className="flex items-center gap-3">
-          <img src="/sce_logo.jpg" alt="SCE" className="h-10 w-10 rounded" />
+          <img src="/sce_logo.ico" alt="SCE" className="h-10 w-10 rounded" />
           <span className="text-white font-semibold text-xl tracking-tight">SpotiPi</span>
         </div>
       </nav>
