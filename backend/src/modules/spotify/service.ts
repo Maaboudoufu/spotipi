@@ -158,5 +158,11 @@ export async function spotifyApi(endpoint: string, options: RequestInit = {}) {
     throw new Error(`Spotify API error (${res.status}): ${err}`);
   }
 
-  return res.json();
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
