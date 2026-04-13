@@ -14,6 +14,8 @@ import searchRoutes from "./routes/search";
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 app.use(cors({
   origin: config.frontendBaseUrl,
   credentials: true,
