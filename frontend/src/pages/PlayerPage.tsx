@@ -67,8 +67,10 @@ export default function PlayerPage() {
   const queueMutation = useMutation({
     mutationFn: (uri: string) => api.addToQueue(uri),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["queue"] });
       showMsg("success", "Added to queue");
+      setTimeout(() => {
+        queryClient.refetchQueries({ queryKey: ["queue"] });
+      }, 1000);
     },
     onError: (e: Error) => showMsg("error", e.message),
   });
