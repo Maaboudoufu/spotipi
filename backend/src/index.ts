@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
+import path from "path";
 import { config } from "./config";
 
 import authRoutes from "./routes/auth";
@@ -38,6 +39,13 @@ app.use("/api/search", searchRoutes);
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+// Serve frontend static files in production
+const frontendDist = path.resolve(__dirname, "../../frontend/dist");
+app.use(express.static(frontendDist));
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(frontendDist, "index.html"));
 });
 
 app.listen(config.port, () => {
