@@ -47,6 +47,31 @@ router.put("/transfer", requireRole("admin", "dj"), async (req: Request, res: Re
   }
 });
 
+router.put("/volume", requireRole("admin", "dj"), async (req: Request, res: Response) => {
+  const rawVolume = req.body?.volumePercent;
+  const volumePercent = Number(rawVolume);
+  if (!Number.isFinite(volumePercent) || volumePercent < 0 || volumePercent > 100) {
+    res.status(400).json({ error: "volumePercent must be between 0 and 100" });
+    return;
+  }
+
+  try {
+    await ensureDevice();
+    await spotifyApi(`/me/player/volume?volume_percent=${Math.round(volumePercent)}`, {
+      method: "PUT",
+    });
+    await logAudit({
+      actorUserId: req.currentUser!.id,
+      action: "volume_set",
+      metadata: { volumePercent: Math.round(volumePercent) },
+      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
+    });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 router.get("/state", async (_req: Request, res: Response) => {
   try {
     const state = await spotifyApi("/me/player");

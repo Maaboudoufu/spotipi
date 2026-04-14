@@ -12,7 +12,9 @@ export default function PlayerPage() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showDevices, setShowDevices] = useState(false);
   const [displayProgressMs, setDisplayProgressMs] = useState(0);
+  const [volumePercent, setVolumePercent] = useState(50);
   const searchRequestIdRef = useRef(0);
+  const volumeDebounceTimerRef = useRef<number | null>(null);
 
   const canControl = hasRole("admin", "dj");
 
@@ -122,6 +124,14 @@ export default function PlayerPage() {
     onError: (e: Error) => showMsg("error", e.message),
   });
 
+  const volumeMutation = useMutation({
+    mutationFn: (nextVolume: number) => api.setVolume(nextVolume),
+    onError: (e: Error) => showMsg("error", e.message),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["playerState"] });
+    },
+  });
+
   const handleSearch = async () => {
     const q = searchQuery.trim();
     if (q.length < 3) {
@@ -160,6 +170,20 @@ export default function PlayerPage() {
   }, [playerState?.item?.uri, playerState?.progress_ms, playerState?.is_playing, track?.duration_ms]);
 
   useEffect(() => {
+    const serverVolume = playerState?.device?.volume_percent;
+    if (typeof serverVolume !== "number") return;
+    setVolumePercent(serverVolume);
+  }, [playerState?.device?.name, playerState?.device?.volume_percent]);
+
+  useEffect(() => {
+    return () => {
+      if (volumeDebounceTimerRef.current) {
+        window.clearTimeout(volumeDebounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!playerState?.is_playing) return;
     if (!track?.duration_ms) return;
 
@@ -177,6 +201,19 @@ export default function PlayerPage() {
   const formatTime = (ms: number) => {
     const s = Math.floor(clampProgress(ms) / 1000);
     return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+  };
+
+  const handleVolumeChange = (value: number) => {
+    const nextVolume = Math.max(0, Math.min(100, value));
+    setVolumePercent(nextVolume);
+
+    if (volumeDebounceTimerRef.current) {
+      window.clearTimeout(volumeDebounceTimerRef.current);
+    }
+
+    volumeDebounceTimerRef.current = window.setTimeout(() => {
+      volumeMutation.mutate(nextVolume);
+    }, 200);
   };
 
   return (
@@ -241,48 +278,65 @@ export default function PlayerPage() {
 
                 {/* Playback controls */}
                 {canControl && (
-                  <div className="flex items-center gap-3 mt-4">
-                    <button
-                      onClick={() => prevMutation.mutate()}
-                      className="p-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-white transition"
-                      title="Previous"
-                    >
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
-                      </svg>
-                    </button>
-
-                    {playerState?.is_playing ? (
+                  <div className="mt-4 space-y-3">
+                    <div className="flex items-center gap-3">
                       <button
-                        onClick={() => pauseMutation.mutate()}
-                        className="p-3 rounded-full bg-sce-accent text-sce-darker hover:bg-sce-accent/90 transition"
-                        title="Pause"
+                        onClick={() => prevMutation.mutate()}
+                        className="p-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-white transition"
+                        title="Previous"
                       >
-                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
                         </svg>
                       </button>
-                    ) : (
+
+                      {playerState?.is_playing ? (
+                        <button
+                          onClick={() => pauseMutation.mutate()}
+                          className="p-3 rounded-full bg-sce-accent text-sce-darker hover:bg-sce-accent/90 transition"
+                          title="Pause"
+                        >
+                          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                          </svg>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => playMutation.mutate()}
+                          className="p-3 rounded-full bg-sce-accent text-sce-darker hover:bg-sce-accent/90 transition"
+                          title="Play"
+                        >
+                          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        </button>
+                      )}
+
                       <button
-                        onClick={() => playMutation.mutate()}
-                        className="p-3 rounded-full bg-sce-accent text-sce-darker hover:bg-sce-accent/90 transition"
-                        title="Play"
+                        onClick={() => nextMutation.mutate()}
+                        className="p-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-white transition"
+                        title="Next"
                       >
-                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M8 5v14l11-7z" />
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
                         </svg>
                       </button>
-                    )}
+                    </div>
 
-                    <button
-                      onClick={() => nextMutation.mutate()}
-                      className="p-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-white transition"
-                      title="Next"
-                    >
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
-                      </svg>
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-gray-500 w-12">Volume</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={volumePercent}
+                        onChange={(e) => handleVolumeChange(Number(e.target.value))}
+                        className="flex-1 accent-sce-accent"
+                        title="Volume"
+                      />
+                      <span className="text-xs text-gray-400 w-9 text-right">{Math.round(volumePercent)}%</span>
+                    </div>
                   </div>
                 )}
 

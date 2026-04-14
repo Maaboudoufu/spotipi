@@ -58,6 +58,11 @@ export const api = {
   getDevices: () => request<{ devices: SpotifyDevice[] }>("/player/devices"),
   transferPlayback: (deviceId: string) =>
     request("/player/transfer", { method: "PUT", body: JSON.stringify({ deviceId }) }),
+  setVolume: (volumePercent: number) =>
+    request("/player/volume", {
+      method: "PUT",
+      body: JSON.stringify({ volumePercent }),
+    }),
 
   // Search
   search: (q: string) => request<SpotifySearchResults>(`/search?q=${encodeURIComponent(q)}`),
