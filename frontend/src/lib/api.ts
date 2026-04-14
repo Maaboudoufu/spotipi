@@ -55,6 +55,9 @@ export const api = {
   addToQueue: (uri: string) =>
     request("/player/queue", { method: "POST", body: JSON.stringify({ uri }) }),
   getQueue: () => request<SpotifyQueue>("/player/queue"),
+  getDevices: () => request<{ devices: SpotifyDevice[] }>("/player/devices"),
+  transferPlayback: (deviceId: string) =>
+    request("/player/transfer", { method: "PUT", body: JSON.stringify({ deviceId }) }),
 
   // Search
   search: (q: string) => request<SpotifySearchResults>(`/search?q=${encodeURIComponent(q)}`),
@@ -113,6 +116,14 @@ export interface SpotifyPlayerState {
 export interface SpotifyQueue {
   currently_playing: SpotifyPlayerState["item"] | null;
   queue: SpotifyPlayerState["item"][];
+}
+
+export interface SpotifyDevice {
+  id: string;
+  name: string;
+  type: string;
+  is_active: boolean;
+  volume_percent: number | null;
 }
 
 export interface SpotifySearchResults {

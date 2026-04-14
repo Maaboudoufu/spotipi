@@ -7,6 +7,46 @@ const router = Router();
 
 router.use(requireAuth);
 
+router.get("/devices", async (_req: Request, res: Response) => {
+  try {
+    const data = (await spotifyApi("/me/player/devices")) as {
+      devices: Array<{
+        id: string;
+        name: string;
+        type: string;
+        is_active: boolean;
+        volume_percent: number | null;
+      }>;
+    };
+    res.json({ devices: data?.devices || [] });
+  } catch (err: any) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+router.put("/transfer", requireRole("admin", "dj"), async (req: Request, res: Response) => {
+  const { deviceId } = req.body;
+  if (!deviceId) {
+    res.status(400).json({ error: "Device ID required" });
+    return;
+  }
+  try {
+    await spotifyApi("/me/player", {
+      method: "PUT",
+      body: JSON.stringify({ device_ids: [deviceId], play: true }),
+    });
+    await logAudit({
+      actorUserId: req.currentUser!.id,
+      action: "device_transfer",
+      metadata: { deviceId },
+      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
+    });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 router.get("/state", async (_req: Request, res: Response) => {
   try {
     const state = await spotifyApi("/me/player");
