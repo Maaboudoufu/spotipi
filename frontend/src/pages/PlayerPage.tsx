@@ -539,6 +539,12 @@ export default function PlayerPage() {
             <span className="text-xs text-gray-500">Last 20</span>
           </div>
 
+          {recentlyPlayed?.requiresReconnect && (
+            <div className="mb-3 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">
+              Reconnect Spotify from the admin page to grant recently played access.
+            </div>
+          )}
+
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {recentItems.length ? (
               recentItems.map((entry, i) => {

@@ -180,15 +180,28 @@ router.get("/recently-played", async (_req: Request, res: Response) => {
     const data = await spotifyApi("/me/player/recently-played?limit=20");
     res.json(data || { items: [] });
   } catch (err: any) {
-    res.status(502).json({ error: err.message });
+    const message = String(err?.message || "Failed to load recently played");
+    if (message.includes("403") || message.toLowerCase().includes("insufficient") || message.toLowerCase().includes("scope")) {
+      res.json({ items: [], requiresReconnect: true, error: message });
+      return;
+    }
+    res.status(502).json({ error: message });
   }
 });
 
 router.get("/recommendations", async (_req: Request, res: Response) => {
   try {
-    const recent = (await spotifyApi("/me/player/recently-played?limit=15")) as {
+    let recent: {
       items?: Array<{ track?: { id?: string; artists?: Array<{ id?: string }> } }>;
-    };
+    } | null = null;
+
+    try {
+      recent = (await spotifyApi("/me/player/recently-played?limit=15")) as {
+        items?: Array<{ track?: { id?: string; artists?: Array<{ id?: string }> } }>;
+      };
+    } catch {
+      recent = null;
+    }
 
     const trackSeeds = Array.from(
       new Set(

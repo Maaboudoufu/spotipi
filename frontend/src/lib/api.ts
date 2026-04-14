@@ -152,6 +152,8 @@ export interface SpotifyTrack {
 }
 
 export interface SpotifyRecentlyPlayed {
+  requiresReconnect?: boolean;
+  error?: string;
   items: Array<{
     played_at: string;
     track: SpotifyTrack;
