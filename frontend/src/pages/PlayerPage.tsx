@@ -148,7 +148,7 @@ export default function PlayerPage() {
 
   const handleSearch = async () => {
     const q = searchQuery.trim();
-    if (q.length < 3) {
+    if (q.length < 2) {
       setSearchResults([]);
       return;
     }
