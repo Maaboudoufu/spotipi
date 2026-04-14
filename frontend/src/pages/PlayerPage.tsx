@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, SpotifyPlayerState, SpotifyDevice } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -11,6 +11,7 @@ export default function PlayerPage() {
   const [searching, setSearching] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showDevices, setShowDevices] = useState(false);
+  const [displayProgressMs, setDisplayProgressMs] = useState(0);
 
   const canControl = hasRole("admin", "dj");
 
@@ -111,9 +112,25 @@ export default function PlayerPage() {
 
   const track = playerState?.item;
   const albumArt = track?.album?.images?.[0]?.url;
-  const progress = playerState?.progress_ms || 0;
+  const progress = displayProgressMs;
   const duration = track?.duration_ms || 0;
   const progressPct = duration > 0 ? (progress / duration) * 100 : 0;
+
+  useEffect(() => {
+    setDisplayProgressMs(playerState?.progress_ms || 0);
+  }, [playerState?.item?.uri, playerState?.progress_ms, playerState?.is_playing]);
+
+  useEffect(() => {
+    if (!playerState?.is_playing) return;
+    if (!track?.duration_ms) return;
+
+    const tickMs = 200;
+    const timer = window.setInterval(() => {
+      setDisplayProgressMs((prev) => Math.min(prev + tickMs, track.duration_ms));
+    }, tickMs);
+
+    return () => window.clearInterval(timer);
+  }, [playerState?.is_playing, track?.duration_ms, track?.uri]);
 
   const formatTime = (ms: number) => {
     const s = Math.floor(ms / 1000);
