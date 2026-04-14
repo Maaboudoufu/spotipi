@@ -10,6 +10,7 @@ const SCOPES = [
   "user-read-playback-state",
   "user-modify-playback-state",
   "user-read-currently-playing",
+  "user-read-recently-played",
 ].join(" ");
 
 export function getAuthUrl(state: string): string {

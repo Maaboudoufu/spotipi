@@ -63,6 +63,8 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ volumePercent }),
     }),
+  getRecentlyPlayed: () => request<SpotifyRecentlyPlayed>("/player/recently-played"),
+  getRecommendations: () => request<SpotifyRecommendations>("/player/recommendations"),
 
   // Search
   search: (q: string) => request<SpotifySearchResults>(`/search?q=${encodeURIComponent(q)}`),
@@ -135,4 +137,28 @@ export interface SpotifySearchResults {
   tracks?: { items: SpotifyPlayerState["item"][] };
   artists?: { items: { name: string; id: string; images: { url: string }[] }[] };
   albums?: { items: { name: string; id: string; images: { url: string }[] }[] };
+}
+
+export interface SpotifyTrack {
+  id?: string;
+  name: string;
+  uri: string;
+  artists: { id?: string; name: string }[];
+  album: {
+    id?: string;
+    name: string;
+    images: { url: string; width?: number; height?: number }[];
+  };
+}
+
+export interface SpotifyRecentlyPlayed {
+  items: Array<{
+    played_at: string;
+    track: SpotifyTrack;
+  }>;
+}
+
+export interface SpotifyRecommendations {
+  source: "recommendations" | "new_releases";
+  tracks: Array<SpotifyTrack | { id?: string; name: string; images?: { url: string }[]; artists?: { name: string }[]; uri?: string }>;
 }

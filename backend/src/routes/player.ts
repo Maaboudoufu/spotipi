@@ -175,4 +175,58 @@ router.get("/queue", async (_req: Request, res: Response) => {
   }
 });
 
+router.get("/recently-played", async (_req: Request, res: Response) => {
+  try {
+    const data = await spotifyApi("/me/player/recently-played?limit=20");
+    res.json(data || { items: [] });
+  } catch (err: any) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+router.get("/recommendations", async (_req: Request, res: Response) => {
+  try {
+    const recent = (await spotifyApi("/me/player/recently-played?limit=15")) as {
+      items?: Array<{ track?: { id?: string; artists?: Array<{ id?: string }> } }>;
+    };
+
+    const trackSeeds = Array.from(
+      new Set(
+        (recent?.items || [])
+          .map((item) => item.track?.id)
+          .filter((id): id is string => Boolean(id))
+      )
+    ).slice(0, 3);
+
+    const artistSeeds = Array.from(
+      new Set(
+        (recent?.items || [])
+          .flatMap((item) => item.track?.artists || [])
+          .map((artist) => artist.id)
+          .filter((id): id is string => Boolean(id))
+      )
+    ).slice(0, 2);
+
+    const params = new URLSearchParams({
+      limit: "20",
+      seed_tracks: trackSeeds.join(","),
+      seed_artists: artistSeeds.join(","),
+    });
+
+    if (!trackSeeds.length && !artistSeeds.length) {
+      const fallback = await spotifyApi("/browse/new-releases?limit=20");
+      res.json({
+        source: "new_releases",
+        tracks: (fallback as any)?.albums?.items || [],
+      });
+      return;
+    }
+
+    const recommendations = await spotifyApi(`/recommendations?${params.toString()}`);
+    res.json({ source: "recommendations", ...(recommendations || { tracks: [] }) });
+  } catch (err: any) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 export default router;

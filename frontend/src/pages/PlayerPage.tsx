@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, SpotifyPlayerState, SpotifyDevice } from "../lib/api";
+import { api, SpotifyPlayerState } from "../lib/api";
 import { useAuth } from "../lib/auth";
 
 export default function PlayerPage() {
@@ -45,6 +45,20 @@ export default function PlayerPage() {
     queryKey: ["devices"],
     queryFn: api.getDevices,
     enabled: showDevices,
+  });
+
+  const { data: recentlyPlayed } = useQuery({
+    queryKey: ["recentlyPlayed"],
+    queryFn: api.getRecentlyPlayed,
+    refetchInterval: 30000,
+    refetchIntervalInBackground: true,
+  });
+
+  const { data: recommendations } = useQuery({
+    queryKey: ["recommendations"],
+    queryFn: api.getRecommendations,
+    refetchInterval: 60000,
+    refetchIntervalInBackground: true,
   });
 
   const showMsg = (type: "success" | "error", text: string) => {
@@ -215,6 +229,19 @@ export default function PlayerPage() {
       volumeMutation.mutate(nextVolume);
     }, 200);
   };
+
+  const recentItems = recentlyPlayed?.items || [];
+  const recommendationItems = recommendations?.tracks || [];
+
+  const getTrackTitle = (item: any) => item?.name || "Unknown track";
+  const getTrackArtists = (item: any) => {
+    const artists = Array.isArray(item?.artists) ? item.artists.map((a: any) => a?.name).filter(Boolean) : [];
+    if (artists.length) return artists.join(", ");
+    if (item?.album?.name) return item.album.name;
+    return "Spotify";
+  };
+  const getTrackImage = (item: any) => item?.album?.images?.[2]?.url || item?.album?.images?.[0]?.url || item?.images?.[0]?.url;
+  const getTrackUri = (item: any) => item?.uri;
 
   return (
     <div className="space-y-8">
@@ -502,6 +529,87 @@ export default function PlayerPage() {
           </div>
         </div>
       )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-sce-card rounded-xl border border-white/5 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+              Recently Played
+            </h2>
+            <span className="text-xs text-gray-500">Last 20</span>
+          </div>
+
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {recentItems.length ? (
+              recentItems.map((entry, i) => {
+                const image = getTrackImage(entry.track);
+                const uri = getTrackUri(entry.track);
+                return (
+                  <div key={`${entry.track?.uri || entry.played_at}-${i}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition group">
+                    {image && <img src={image} alt="" className="w-10 h-10 rounded" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white truncate">{getTrackTitle(entry.track)}</p>
+                      <p className="text-xs text-gray-500 truncate">{getTrackArtists(entry.track)}</p>
+                    </div>
+                    <span className="text-[11px] text-gray-500 whitespace-nowrap">
+                      {new Date(entry.played_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                    </span>
+                    {canControl && uri && (
+                      <button
+                        onClick={() => queueMutation.mutate(uri)}
+                        className="opacity-0 group-hover:opacity-100 px-2.5 py-1 text-xs bg-sce-accent/20 text-sce-accent rounded-full hover:bg-sce-accent/30 transition"
+                      >
+                        + Queue
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-gray-500 py-4 text-center">No recent playback yet</p>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-sce-card rounded-xl border border-white/5 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+              For This Room
+            </h2>
+            <span className="text-xs text-gray-500">
+              {recommendations?.source === "new_releases" ? "New Releases" : "Based on recent plays"}
+            </span>
+          </div>
+
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {recommendationItems.length ? (
+              recommendationItems.map((item, i) => {
+                const image = getTrackImage(item);
+                const uri = getTrackUri(item);
+                return (
+                  <div key={`${getTrackTitle(item)}-${i}`} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition group">
+                    {image && <img src={image} alt="" className="w-10 h-10 rounded" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white truncate">{getTrackTitle(item)}</p>
+                      <p className="text-xs text-gray-500 truncate">{getTrackArtists(item)}</p>
+                    </div>
+                    {canControl && uri && (
+                      <button
+                        onClick={() => queueMutation.mutate(uri)}
+                        className="opacity-0 group-hover:opacity-100 px-2.5 py-1 text-xs bg-sce-accent/20 text-sce-accent rounded-full hover:bg-sce-accent/30 transition"
+                      >
+                        + Queue
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-gray-500 py-4 text-center">Nothing to recommend yet</p>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
