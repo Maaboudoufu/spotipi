@@ -18,12 +18,16 @@ export default function PlayerPage() {
     queryKey: ["playerState"],
     queryFn: api.getPlayerState,
     refetchInterval: 5000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   });
 
   const { data: queue } = useQuery({
     queryKey: ["queue"],
     queryFn: api.getQueue,
     refetchInterval: 10000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   });
 
   const { data: devicesData, refetch: refetchDevices } = useQuery({
