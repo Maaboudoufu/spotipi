@@ -42,6 +42,18 @@ export default function PlayerPage() {
     setTimeout(() => setMessage(null), 3000);
   };
 
+  const runSearch = async (query: string) => {
+    setSearching(true);
+    try {
+      const results = await api.search(query);
+      setSearchResults(results.tracks?.items || []);
+    } catch (e: any) {
+      showMsg("error", e.message);
+    } finally {
+      setSearching(false);
+    }
+  };
+
   const playMutation = useMutation({
     mutationFn: (uri?: string | void) => api.play(uri || undefined),
     onSuccess: () => {
@@ -98,17 +110,43 @@ export default function PlayerPage() {
   });
 
   const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setSearching(true);
-    try {
-      const results = await api.search(searchQuery);
-      setSearchResults(results.tracks?.items || []);
-    } catch (e: any) {
-      showMsg("error", e.message);
-    } finally {
-      setSearching(false);
+    const q = searchQuery.trim();
+    if (q.length < 3) {
+      setSearchResults([]);
+      return;
     }
+    await runSearch(q);
   };
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 3) {
+      setSearching(false);
+      setSearchResults([]);
+      return;
+    }
+
+    let active = true;
+    const timeout = window.setTimeout(async () => {
+      setSearching(true);
+      try {
+        const results = await api.search(q);
+        if (!active) return;
+        setSearchResults(results.tracks?.items || []);
+      } catch (e: any) {
+        if (!active) return;
+        showMsg("error", e.message);
+      } finally {
+        if (!active) return;
+        setSearching(false);
+      }
+    }, 400);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [searchQuery]);
 
   const track = playerState?.item;
   const albumArt = track?.album?.images?.[0]?.url;
@@ -335,7 +373,7 @@ export default function PlayerPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="Search for tracks..."
+                placeholder="Type at least 3 characters..."
                 className="flex-1 px-4 py-2.5 bg-sce-darker border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-sce-accent/50 transition"
               />
               <button
