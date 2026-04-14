@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, SpotifyPlayerState, SpotifyDevice } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -12,8 +12,16 @@ export default function PlayerPage() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showDevices, setShowDevices] = useState(false);
   const [displayProgressMs, setDisplayProgressMs] = useState(0);
+  const searchRequestIdRef = useRef(0);
 
   const canControl = hasRole("admin", "dj");
+
+  const clampProgress = (value: number, max?: number) => {
+    const safeValue = Number.isFinite(value) ? value : 0;
+    const bounded = Math.max(0, safeValue);
+    if (!max || max <= 0) return bounded;
+    return Math.min(bounded, max);
+  };
 
   const { data: playerState, isLoading } = useQuery({
     queryKey: ["playerState"],
@@ -43,13 +51,18 @@ export default function PlayerPage() {
   };
 
   const runSearch = async (query: string) => {
+    const requestId = ++searchRequestIdRef.current;
     setSearching(true);
     try {
       const results = await api.search(query);
+      if (requestId !== searchRequestIdRef.current) return;
       setSearchResults(results.tracks?.items || []);
     } catch (e: any) {
+      if (requestId !== searchRequestIdRef.current) return;
+      setSearchResults([]);
       showMsg("error", e.message);
     } finally {
+      if (requestId !== searchRequestIdRef.current) return;
       setSearching(false);
     }
   };
@@ -121,57 +134,48 @@ export default function PlayerPage() {
   useEffect(() => {
     const q = searchQuery.trim();
     if (q.length < 3) {
+      searchRequestIdRef.current += 1;
       setSearching(false);
       setSearchResults([]);
       return;
     }
 
-    let active = true;
     const timeout = window.setTimeout(async () => {
-      setSearching(true);
-      try {
-        const results = await api.search(q);
-        if (!active) return;
-        setSearchResults(results.tracks?.items || []);
-      } catch (e: any) {
-        if (!active) return;
-        showMsg("error", e.message);
-      } finally {
-        if (!active) return;
-        setSearching(false);
-      }
+      await runSearch(q);
     }, 400);
 
     return () => {
-      active = false;
       window.clearTimeout(timeout);
     };
   }, [searchQuery]);
 
   const track = playerState?.item;
   const albumArt = track?.album?.images?.[0]?.url;
-  const progress = displayProgressMs;
   const duration = track?.duration_ms || 0;
+  const progress = clampProgress(displayProgressMs, duration);
   const progressPct = duration > 0 ? (progress / duration) * 100 : 0;
 
   useEffect(() => {
-    setDisplayProgressMs(playerState?.progress_ms || 0);
-  }, [playerState?.item?.uri, playerState?.progress_ms, playerState?.is_playing]);
+    setDisplayProgressMs(clampProgress(playerState?.progress_ms || 0, track?.duration_ms));
+  }, [playerState?.item?.uri, playerState?.progress_ms, playerState?.is_playing, track?.duration_ms]);
 
   useEffect(() => {
     if (!playerState?.is_playing) return;
     if (!track?.duration_ms) return;
 
-    const tickMs = 200;
+    let lastTick = Date.now();
     const timer = window.setInterval(() => {
-      setDisplayProgressMs((prev) => Math.min(prev + tickMs, track.duration_ms));
-    }, tickMs);
+      const now = Date.now();
+      const elapsed = now - lastTick;
+      lastTick = now;
+      setDisplayProgressMs((prev) => clampProgress(prev + elapsed, track.duration_ms));
+    }, 250);
 
     return () => window.clearInterval(timer);
   }, [playerState?.is_playing, track?.duration_ms, track?.uri]);
 
   const formatTime = (ms: number) => {
-    const s = Math.floor(ms / 1000);
+    const s = Math.floor(clampProgress(ms) / 1000);
     return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
   };
 
