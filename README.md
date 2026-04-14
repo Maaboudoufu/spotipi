@@ -2,14 +2,18 @@
 
 A web application for shared Spotify playback control. Authorized users can control a single shared Spotify account through a web UI without needing their own Spotify accounts.
 
+![Preview](preview.png)
+
 ## Features
 
-- **Playback controls** — play, pause, skip, previous, queue tracks
-- **Spotify search** — search the Spotify catalog and add tracks to the queue
-- **Role-based access** — admin, dj, and viewer roles with appropriate permissions
+- **Playback controls** — play, pause, skip, previous, volume slider, device transfer
+- **Queue management** — view upcoming tracks and add new ones
+- **Spotify search** — search the Spotify catalog and queue tracks directly
+- **Recently played & recommendations** — browse listening history and discover new tracks via Spotify recommendations
+- **Role-based access** — admin, DJ, and viewer roles with appropriate permissions
 - **User management** — admins can create users, assign roles, and reset passwords
-- **Audit logging** — all actions are logged with actor, action, target, and timestamp
-- **Secure by default** — bcrypt passwords, encrypted token storage, HTTP-only cookies, rate limiting
+- **Audit logging** — all actions logged with actor, action, target, timestamp, and IP address
+- **Secure by default** — bcrypt passwords, AES-encrypted token storage, HTTP-only cookies, rate limiting
 
 ## Tech Stack
 
@@ -78,13 +82,34 @@ A web application for shared Spotify playback control. Authorized users can cont
 
 5. **Connect Spotify:** Log in as an admin and connect a Spotify account from the admin panel.
 
+## Production
+
+An `ecosystem.config.cjs` is included for running with PM2:
+
+```bash
+npm -w backend run build
+npm -w frontend run build
+pm2 start ecosystem.config.cjs
+```
+
 ## Roles
 
-| Role   | Permissions                                      |
-|--------|--------------------------------------------------|
-| admin  | User management, Spotify connection, playback, audit logs |
-| dj     | Playback controls (play, pause, skip, queue)     |
-| viewer | View current playback state (read-only)          |
+| Role   | Permissions                                                    |
+|--------|----------------------------------------------------------------|
+| admin  | User management, Spotify connection, playback, audit logs      |
+| dj     | Playback controls (play, pause, skip, queue, volume)           |
+| viewer | View current playback state (read-only)                        |
+
+## API
+
+| Group    | Endpoints                                                                                      |
+|----------|------------------------------------------------------------------------------------------------|
+| Auth     | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`                           |
+| Users    | `GET /api/users`, `POST /api/users`, `PATCH /api/users/:id`, `POST /api/users/:id/reset-password` |
+| Spotify  | `GET /api/spotify/status`, `GET /api/spotify/connect`, `POST /api/spotify/disconnect`          |
+| Player   | `GET /api/player/state`, `POST /api/player/play`, `POST /api/player/pause`, `POST /api/player/next`, `POST /api/player/previous`, `PUT /api/player/volume`, `GET /api/player/devices`, `PUT /api/player/transfer`, `POST /api/player/queue`, `GET /api/player/queue`, `GET /api/player/recently-played`, `GET /api/player/recommendations` |
+| Search   | `GET /api/search?q=...`                                                                        |
+| Audit    | `GET /api/audit-logs`                                                                          |
 
 ## Project Structure
 
@@ -101,7 +126,7 @@ spotipi/
 │       ├── modules/   # Business logic services
 │       ├── middleware/ # Auth & role middleware
 │       └── utils/     # Encryption helpers
-└── prisma/            # Database schema
+└── prisma/            # Database schema & seed
 ```
 
 ## License
