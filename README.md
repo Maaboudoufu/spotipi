@@ -57,6 +57,15 @@ A web application for shared Spotify playback control. Authorized users can cont
    cd ..
    ```
 
+   This creates two default accounts:
+
+   | Username | Password   | Role  |
+   |----------|------------|-------|
+   | `admin`  | `admin123` | admin |
+   | `dj`     | `dj123`    | dj    |
+
+   **Change these passwords after first login.**
+
 4. **Start the development servers:**
 
    ```bash
