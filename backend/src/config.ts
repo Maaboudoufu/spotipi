@@ -15,4 +15,5 @@ export const config = {
   tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY || "change-me-32-char-encryption-key",
   appBaseUrl: process.env.APP_BASE_URL || "http://localhost:3001",
   frontendBaseUrl: process.env.FRONTEND_BASE_URL || "http://localhost:5173",
+  spotifyDeviceName: process.env.SPOTIFY_DEVICE_NAME || "",
 };

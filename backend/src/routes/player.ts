@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { requireAuth, requireRole } from "../middleware/auth";
-import { spotifyApi } from "../modules/spotify/service";
+import { spotifyApi, ensureDevice } from "../modules/spotify/service";
 import { logAudit } from "../modules/audit/service";
 
 const router = Router();
@@ -18,6 +18,7 @@ router.get("/state", async (_req: Request, res: Response) => {
 
 router.post("/play", requireRole("admin", "dj"), async (req: Request, res: Response) => {
   try {
+    await ensureDevice();
     const body = req.body.uri ? { uris: [req.body.uri] } : undefined;
     await spotifyApi("/me/player/play", {
       method: "PUT",
@@ -51,6 +52,7 @@ router.post("/pause", requireRole("admin", "dj"), async (req: Request, res: Resp
 
 router.post("/next", requireRole("admin", "dj"), async (req: Request, res: Response) => {
   try {
+    await ensureDevice();
     await spotifyApi("/me/player/next", { method: "POST" });
     await logAudit({
       actorUserId: req.currentUser!.id,
@@ -65,6 +67,7 @@ router.post("/next", requireRole("admin", "dj"), async (req: Request, res: Respo
 
 router.post("/previous", requireRole("admin", "dj"), async (req: Request, res: Response) => {
   try {
+    await ensureDevice();
     await spotifyApi("/me/player/previous", { method: "POST" });
     await logAudit({
       actorUserId: req.currentUser!.id,
@@ -84,6 +87,7 @@ router.post("/queue", requireRole("admin", "dj"), async (req: Request, res: Resp
     return;
   }
   try {
+    await ensureDevice();
     await spotifyApi(`/me/player/queue?uri=${encodeURIComponent(uri)}`, { method: "POST" });
     await logAudit({
       actorUserId: req.currentUser!.id,

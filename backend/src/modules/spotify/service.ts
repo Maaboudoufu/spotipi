@@ -139,6 +139,38 @@ export async function disconnect() {
   await prisma.spotifyConnection.deleteMany();
 }
 
+export async function ensureDevice(): Promise<void> {
+  // Check if there's already an active device
+  const state = await spotifyApi("/me/player");
+  if (state?.device) return;
+
+  // No active device — find the target device and transfer playback
+  const { devices } = (await spotifyApi("/me/player/devices")) as {
+    devices: Array<{ id: string; name: string; is_active: boolean }>;
+  };
+
+  if (!devices || devices.length === 0) {
+    throw new Error("No Spotify devices available. Is Raspotify running?");
+  }
+
+  const targetName = config.spotifyDeviceName;
+  const device = targetName
+    ? devices.find((d) => d.name.toLowerCase().includes(targetName.toLowerCase()))
+    : devices[0];
+
+  if (!device) {
+    throw new Error(`Spotify device "${targetName}" not found. Available: ${devices.map((d) => d.name).join(", ")}`);
+  }
+
+  await spotifyApi("/me/player", {
+    method: "PUT",
+    body: JSON.stringify({ device_ids: [device.id], play: false }),
+  });
+
+  // Give Spotify a moment to activate the device
+  await new Promise((r) => setTimeout(r, 500));
+}
+
 export async function spotifyApi(endpoint: string, options: RequestInit = {}) {
   const token = await getAccessToken();
   if (!token) throw new Error("No Spotify connection");
