@@ -9,6 +9,8 @@ export default function UsersPage() {
   const [newPassword, setNewPassword] = useState("");
   const [newRoles, setNewRoles] = useState<string[]>(["viewer"]);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [resetUserId, setResetUserId] = useState<string | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["users"],
@@ -49,6 +51,18 @@ export default function UsersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       showMsg("success", "Roles updated");
+    },
+    onError: (e: Error) => showMsg("error", e.message),
+  });
+
+  const resetPwMutation = useMutation({
+    mutationFn: ({ id, password }: { id: string; password: string }) =>
+      api.resetPassword(id, password),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setResetUserId(null);
+      setResetPassword("");
+      showMsg("success", "Password updated");
     },
     onError: (e: Error) => showMsg("error", e.message),
   });
@@ -208,17 +222,67 @@ export default function UsersPage() {
                       : "Never"}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button
-                      onClick={() =>
-                        toggleActive.mutate({
-                          id: user.id,
-                          isActive: !user.isActive,
-                        })
-                      }
-                      className="text-xs text-gray-400 hover:text-white transition"
-                    >
-                      {user.isActive ? "Disable" : "Enable"}
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      {resetUserId === user.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="password"
+                            value={resetPassword}
+                            onChange={(e) => setResetPassword(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && resetPassword)
+                                resetPwMutation.mutate({ id: user.id, password: resetPassword });
+                              if (e.key === "Escape") {
+                                setResetUserId(null);
+                                setResetPassword("");
+                              }
+                            }}
+                            placeholder="New password"
+                            autoFocus
+                            className="w-32 px-2 py-1 text-xs bg-sce-darker border border-white/10 rounded text-white focus:outline-none focus:ring-1 focus:ring-sce-accent/50"
+                          />
+                          <button
+                            onClick={() =>
+                              resetPwMutation.mutate({ id: user.id, password: resetPassword })
+                            }
+                            disabled={!resetPassword}
+                            className="text-xs text-sce-accent hover:text-sce-accent/80 transition disabled:opacity-50"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => {
+                              setResetUserId(null);
+                              setResetPassword("");
+                            }}
+                            className="text-xs text-gray-500 hover:text-gray-300 transition"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setResetUserId(user.id);
+                            setResetPassword("");
+                          }}
+                          className="text-xs text-gray-400 hover:text-white transition"
+                        >
+                          Edit Password
+                        </button>
+                      )}
+                      <button
+                        onClick={() =>
+                          toggleActive.mutate({
+                            id: user.id,
+                            isActive: !user.isActive,
+                          })
+                        }
+                        className="text-xs text-gray-400 hover:text-white transition"
+                      >
+                        {user.isActive ? "Disable" : "Enable"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
