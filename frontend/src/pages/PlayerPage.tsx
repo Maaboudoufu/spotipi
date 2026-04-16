@@ -164,9 +164,24 @@ export default function PlayerPage() {
   const progress = clampProgress(displayProgressMs, duration);
   const progressPct = duration > 0 ? (progress / duration) * 100 : 0;
 
+  // Snap display progress to the server position only when we have a meaningful
+  // reason to (track change, pause/resume, or significant drift between client
+  // interpolation and server truth). Otherwise the routine 5s server poll would
+  // clobber the smooth 250ms client interpolation and make the bar jerk.
   useEffect(() => {
-    setDisplayProgressMs(clampProgress(playerState?.positionMs || 0, playerState?.durationMs));
-  }, [playerState?.videoId, playerState?.positionMs, playerState?.isPlaying, playerState?.durationMs]);
+    const serverPos = clampProgress(playerState?.positionMs || 0, playerState?.durationMs);
+    setDisplayProgressMs((prev) => {
+      const drift = Math.abs(prev - serverPos);
+      if (drift > 2000) return serverPos;
+      return prev;
+    });
+  }, [playerState?.videoId, playerState?.isPlaying]);
+
+  // On track change explicitly reset to 0 — server may not have sent the first
+  // position event yet, but the new track always starts at 0.
+  useEffect(() => {
+    setDisplayProgressMs(0);
+  }, [playerState?.videoId]);
 
   useEffect(() => {
     if (typeof playerState?.volumePercent !== "number") return;
@@ -281,7 +296,7 @@ export default function PlayerPage() {
                 <div className="mt-4">
                   <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-sce-accent rounded-full transition-all duration-1000"
+                      className="h-full bg-sce-accent rounded-full"
                       style={{ width: `${progressPct}%` }}
                     />
                   </div>
