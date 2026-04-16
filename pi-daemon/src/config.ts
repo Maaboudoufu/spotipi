@@ -8,6 +8,7 @@ export const config = {
   secret: process.env.PI_BRIDGE_SECRET || "",
   mpvSocket: process.env.MPV_SOCKET || "/tmp/mpv-socket",
   mpvBinary: process.env.MPV_BIN || "mpv",
+  mpvAudioOut: process.env.MPV_AUDIO_OUT || "alsa",
   ytdlpBinary: process.env.YTDLP_BIN || "yt-dlp",
   reconnectBaseMs: 1000,
   reconnectMaxMs: 30_000,

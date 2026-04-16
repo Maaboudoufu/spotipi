@@ -48,6 +48,7 @@ export class MpvClient extends EventEmitter {
         "--no-terminal",
         "--no-input-default-bindings",
         "--really-quiet",
+        `--ao=${config.mpvAudioOut}`,
       ],
       { stdio: ["ignore", "pipe", "pipe"] },
     );
