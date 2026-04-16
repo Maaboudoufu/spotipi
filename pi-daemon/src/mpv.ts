@@ -39,19 +39,21 @@ export class MpvClient extends EventEmitter {
       if (fs.existsSync(config.mpvSocket)) fs.unlinkSync(config.mpvSocket);
     } catch {}
 
-    this.child = spawn(
-      config.mpvBinary,
-      [
-        "--no-video",
-        "--idle=yes",
-        `--input-ipc-server=${config.mpvSocket}`,
-        "--no-terminal",
-        "--no-input-default-bindings",
-        "--really-quiet",
-        `--ao=${config.mpvAudioOut}`,
-      ],
-      { stdio: ["ignore", "pipe", "pipe"] },
-    );
+    const args = [
+      "--no-video",
+      "--idle=yes",
+      `--input-ipc-server=${config.mpvSocket}`,
+      "--no-terminal",
+      "--no-input-default-bindings",
+      "--really-quiet",
+      `--ao=${config.mpvAudioOut}`,
+    ];
+    if (config.mpvAudioDevice) {
+      args.push(`--audio-device=${config.mpvAudioDevice}`);
+    }
+    this.child = spawn(config.mpvBinary, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
 
     this.child.on("exit", (code, signal) => {
       console.error(`mpv exited code=${code} signal=${signal}`);
