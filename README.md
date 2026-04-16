@@ -1,36 +1,52 @@
 # Spotipi
 
-A web application for shared Spotify playback control. Authorized users can control a single shared Spotify account through a web UI without needing their own Spotify accounts.
+A web application for shared music playback. Authorized users can control a single shared speaker through a web UI — the backend drives a Raspberry Pi that streams YouTube audio via `mpv` + `yt-dlp`.
 
 ![Preview](preview.png)
 
+## Architecture
+
+```
+[Browser] ──HTTP──► [Oracle backend (Express + Prisma/SQLite)]
+                           │
+                           ├─ YouTube Data API v3 (search, video details)
+                           │
+                           └──WebSocket──► [Pi daemon (Node)]
+                                                  │
+                                                  └─► mpv --no-video
+                                                         (fed by yt-dlp URL)
+```
+
+The Pi opens an outbound WebSocket to the Oracle backend (no inbound firewall holes needed on the LAN). Player state — current track, position, volume, queue, recently-played — lives in the Oracle SQLite database. The Pi is a thin playback slave.
+
 ## Features
 
-- **Playback controls** — play, pause, skip, previous, volume slider, device transfer
+- **Playback controls** — play, pause, skip, previous, volume slider
 - **Queue management** — view upcoming tracks and add new ones
-- **Spotify search** — search the Spotify catalog and queue tracks directly
-- **Recently played & recommendations** — browse listening history and discover new tracks via Spotify recommendations
+- **YouTube search** — search YouTube and queue videos directly
+- **Recently played** — browse listening history
 - **Role-based access** — admin, DJ, and viewer roles with appropriate permissions
 - **User management** — admins can create users, assign roles, and reset passwords
 - **Audit logging** — all actions logged with actor, action, target, timestamp, and IP address
-- **Secure by default** — bcrypt passwords, AES-encrypted token storage, HTTP-only cookies, rate limiting
+- **Secure by default** — bcrypt passwords, HTTP-only cookies, rate limiting, WebSocket token auth
 
 ## Tech Stack
 
 - **Frontend:** React, TypeScript, Vite, Tailwind CSS, TanStack Query
-- **Backend:** Node.js, Express, TypeScript, Prisma, SQLite
-- **Monorepo** managed with npm workspaces
+- **Backend:** Node.js, Express, TypeScript, Prisma, SQLite, `ws`
+- **Pi daemon:** Node.js, `ws`, `mpv` (IPC), `yt-dlp`
+- **Monorepo** managed with npm workspaces (pi-daemon is a separate package)
 
 ## Prerequisites
 
-- Node.js (v18+)
+- Node.js (v20+)
 - npm
-- A [Spotify Developer](https://developer.spotify.com/dashboard) application (client ID and secret)
-- Spotify Premium account (required for playback control)
+- A YouTube Data API v3 key ([Google Cloud Console](https://console.cloud.google.com/apis/credentials))
+- A Raspberry Pi (or any Linux box) with `mpv` and `yt-dlp` installed for playback
 
-## Setup
+## Setup (backend + frontend)
 
-1. **Clone and install dependencies:**
+1. **Clone and install:**
 
    ```bash
    git clone <repo-url>
@@ -44,24 +60,19 @@ A web application for shared Spotify playback control. Authorized users can cont
    cp backend/.env.example backend/.env
    ```
 
-   Edit `backend/.env` and fill in:
-   - `SESSION_SECRET` — a random string for signing sessions
-   - `SPOTIFY_CLIENT_ID` — from your Spotify Developer app
-   - `SPOTIFY_CLIENT_SECRET` — from your Spotify Developer app
-   - `TOKEN_ENCRYPTION_KEY` — a 32-character string for encrypting stored tokens
-
-   Set your Spotify app's redirect URI to `http://localhost:3001/api/spotify/callback`.
+   Edit `backend/.env`:
+   - `SESSION_SECRET` — random string for signing sessions
+   - `YOUTUBE_API_KEY` — YouTube Data API v3 key
+   - `PI_BRIDGE_SECRET` — shared secret; the Pi daemon must send the same value
 
 3. **Initialize the database:**
 
    ```bash
-   cd backend
-   npx prisma db push
-   npx prisma db seed
-   cd ..
+   npx -w backend prisma db push --schema=../prisma/schema.prisma
+   npm -w backend run db:seed
    ```
 
-   This creates two default accounts:
+   Creates two default accounts:
 
    | Username | Password   | Role  |
    |----------|------------|-------|
@@ -70,7 +81,7 @@ A web application for shared Spotify playback control. Authorized users can cont
 
    **Change these passwords after first login.**
 
-4. **Start the development servers:**
+4. **Start the dev servers:**
 
    ```bash
    npm -w backend run dev
@@ -80,11 +91,18 @@ A web application for shared Spotify playback control. Authorized users can cont
    - Frontend: http://localhost:5173
    - Backend: http://localhost:3001
 
-5. **Connect Spotify:** Log in as an admin and connect a Spotify account from the admin panel.
+## Raspberry Pi setup
+
+See [`pi-daemon/README.md`](pi-daemon/README.md) for the full one-time setup. High level:
+
+1. Install `mpv`, `yt-dlp`, Node 20.
+2. Clone the repo on the Pi, `cd pi-daemon && npm install && npm run build`.
+3. Copy `.env.example` to `.env`; set `ORACLE_WS_URL=wss://<your-host>/ws/pi` and `PI_BRIDGE_SECRET=<same as backend>`.
+4. Install the bundled systemd unit (`systemd/spotipi-pi.service`) and `systemctl enable --now spotipi-pi`.
 
 ## Production
 
-An `ecosystem.config.cjs` is included for running with PM2:
+An `ecosystem.config.cjs` is included for running the backend with PM2:
 
 ```bash
 npm -w backend run build
@@ -92,24 +110,47 @@ npm -w frontend run build
 pm2 start ecosystem.config.cjs
 ```
 
+### Reverse proxy note
+
+The WebSocket endpoint `/ws/pi` (configurable via `PI_WS_PATH`) must be proxied with `Upgrade` / `Connection` headers forwarded. Example nginx snippet:
+
+```nginx
+location /ws/pi {
+    proxy_pass http://127.0.0.1:3001;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 3600s;
+}
+```
+
+## CI/CD
+
+Pushes to the `youtube` branch trigger `.github/workflows/deploy.yml`:
+
+- **`deploy-oracle`** — SSHes into the Oracle server, pulls, runs `prisma db push`, rebuilds backend + frontend, restarts PM2.
+- **`deploy-pi`** — runs on a self-hosted runner on the Pi (label `pi`), rebuilds the daemon, and `sudo systemctl restart spotipi-pi`.
+
+Required GitHub secrets: `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY` (all for the Oracle deploy).
+
 ## Roles
 
 | Role   | Permissions                                                    |
 |--------|----------------------------------------------------------------|
-| admin  | User management, Spotify connection, playback, audit logs      |
+| admin  | User management, playback, audit logs                          |
 | dj     | Playback controls (play, pause, skip, queue, volume)           |
 | viewer | View current playback state (read-only)                        |
 
 ## API
 
-| Group    | Endpoints                                                                                      |
-|----------|------------------------------------------------------------------------------------------------|
-| Auth     | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`                           |
-| Users    | `GET /api/users`, `POST /api/users`, `PATCH /api/users/:id`, `POST /api/users/:id/reset-password` |
-| Spotify  | `GET /api/spotify/status`, `GET /api/spotify/connect`, `POST /api/spotify/disconnect`          |
-| Player   | `GET /api/player/state`, `POST /api/player/play`, `POST /api/player/pause`, `POST /api/player/next`, `POST /api/player/previous`, `PUT /api/player/volume`, `GET /api/player/devices`, `PUT /api/player/transfer`, `POST /api/player/queue`, `GET /api/player/queue`, `GET /api/player/recently-played`, `GET /api/player/recommendations` |
-| Search   | `GET /api/search?q=...`                                                                        |
-| Audit    | `GET /api/audit-logs`                                                                          |
+| Group   | Endpoints                                                                                              |
+|---------|--------------------------------------------------------------------------------------------------------|
+| Auth    | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`                                    |
+| Users   | `GET /api/users`, `POST /api/users`, `PATCH /api/users/:id`, `POST /api/users/:id/reset-password`      |
+| Player  | `GET /state`, `POST /play`, `POST /pause`, `POST /next`, `POST /previous`, `PUT /volume`, `GET /queue`, `POST /queue`, `DELETE /queue/:id`, `GET /recently-played` (all under `/api/player`) |
+| Search  | `GET /api/search?q=...`                                                                                |
+| Audit   | `GET /api/audit-logs`                                                                                  |
+| Pi WS   | `GET /ws/pi?token=<PI_BRIDGE_SECRET>` (WebSocket upgrade only)                                         |
 
 ## Project Structure
 
@@ -117,15 +158,20 @@ pm2 start ecosystem.config.cjs
 spotipi/
 ├── frontend/          # React + Vite app
 │   └── src/
-│       ├── pages/     # Page components
-│       ├── components/# Reusable UI components
-│       └── lib/       # API client, auth context
-├── backend/           # Express API server
+│       ├── pages/
+│       ├── components/
+│       └── lib/
+├── backend/           # Express API server + Pi WebSocket bridge
 │   └── src/
-│       ├── routes/    # API route handlers
-│       ├── modules/   # Business logic services
-│       ├── middleware/ # Auth & role middleware
-│       └── utils/     # Encryption helpers
+│       ├── routes/
+│       ├── modules/
+│       │   ├── youtube/  # YouTube Data API v3 client
+│       │   ├── player/   # State + queue
+│       │   └── pi/       # WebSocket bridge + event→state glue
+│       └── middleware/
+├── pi-daemon/         # Standalone Node daemon for the Pi (mpv + yt-dlp)
+│   ├── src/
+│   └── systemd/
 └── prisma/            # Database schema & seed
 ```
 

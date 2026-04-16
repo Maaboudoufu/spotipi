@@ -72,16 +72,48 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-model SpotifyConnection {
-  id                  String   @id @default(uuid())
-  accountLabel        String   @default("main") @map("account_label")
-  spotifyUserId       String?  @map("spotify_user_id")
-  accessTokenEncrypted  String @map("access_token_encrypted")
-  refreshTokenEncrypted String @map("refresh_token_encrypted")
-  tokenExpiresAt      DateTime @map("token_expires_at")
-  scope               String?
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+// Singleton row (id always "current"). Tracks what the Pi is playing.
+model PlayerState {
+  id            String   @id @default("current")
+  videoId       String?  @map("video_id")
+  title         String?
+  channelTitle  String?  @map("channel_title")
+  thumbnailUrl  String?  @map("thumbnail_url")
+  durationMs    Int?     @map("duration_ms")
+  positionMs    Int      @default(0) @map("position_ms")
+  isPlaying     Boolean  @default(false) @map("is_playing")
+  volumePercent Int      @default(50) @map("volume_percent")
+  piConnected   Boolean  @default(false) @map("pi_connected")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  @@map("spotify_connection")
+  @@map("player_state")
+}
+
+model QueueItem {
+  id            String    @id @default(uuid())
+  videoId       String    @map("video_id")
+  title         String
+  channelTitle  String    @map("channel_title")
+  thumbnailUrl  String    @map("thumbnail_url")
+  durationSec   Int       @map("duration_sec")
+  addedByUserId String?   @map("added_by_user_id")
+  position      Int
+  createdAt     DateTime  @default(now()) @map("created_at")
+  playedAt      DateTime? @map("played_at")
+
+  @@index([playedAt, position])
+  @@map("queue_items")
+}
+
+model RecentlyPlayed {
+  id           String   @id @default(uuid())
+  videoId      String   @map("video_id")
+  title        String
+  channelTitle String   @map("channel_title")
+  thumbnailUrl String   @map("thumbnail_url")
+  durationSec  Int      @map("duration_sec")
+  playedAt     DateTime @default(now()) @map("played_at")
+
+  @@index([playedAt])
+  @@map("recently_played")
 }

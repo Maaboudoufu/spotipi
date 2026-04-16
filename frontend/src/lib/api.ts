@@ -40,34 +40,35 @@ export const api = {
   getAuditLogs: (page = 1) =>
     request<{ logs: AuditLogEntry[]; total: number; page: number }>(`/audit-logs?page=${page}`),
 
-  // Spotify
-  getSpotifyStatus: () => request<SpotifyStatus>("/spotify/status"),
-  connectSpotify: () => request<{ url: string }>("/spotify/connect"),
-  disconnectSpotify: () => request("/spotify/disconnect", { method: "POST" }),
-
   // Player
-  getPlayerState: () => request<SpotifyPlayerState>("/player/state"),
-  play: (uri?: string) =>
-    request("/player/play", { method: "POST", body: JSON.stringify(uri ? { uri } : {}) }),
+  getPlayerState: () => request<PlayerState>("/player/state"),
+  play: (videoId?: string) =>
+    request("/player/play", {
+      method: "POST",
+      body: JSON.stringify(videoId ? { videoId } : {}),
+    }),
   pause: () => request("/player/pause", { method: "POST" }),
   next: () => request("/player/next", { method: "POST" }),
   previous: () => request("/player/previous", { method: "POST" }),
-  addToQueue: (uri: string) =>
-    request("/player/queue", { method: "POST", body: JSON.stringify({ uri }) }),
-  getQueue: () => request<SpotifyQueue>("/player/queue"),
-  getDevices: () => request<{ devices: SpotifyDevice[] }>("/player/devices"),
-  transferPlayback: (deviceId: string) =>
-    request("/player/transfer", { method: "PUT", body: JSON.stringify({ deviceId }) }),
+  addToQueue: (videoId: string) =>
+    request<{ item: QueueItem }>("/player/queue", {
+      method: "POST",
+      body: JSON.stringify({ videoId }),
+    }),
+  removeFromQueue: (id: string) =>
+    request(`/player/queue/${id}`, { method: "DELETE" }),
+  getQueue: () => request<QueueResponse>("/player/queue"),
   setVolume: (volumePercent: number) =>
     request("/player/volume", {
       method: "PUT",
       body: JSON.stringify({ volumePercent }),
     }),
-  getRecentlyPlayed: () => request<SpotifyRecentlyPlayed>("/player/recently-played"),
-  getRecommendations: () => request<SpotifyRecommendations>("/player/recommendations"),
+  getRecentlyPlayed: () =>
+    request<{ items: RecentlyPlayedItem[] }>("/player/recently-played"),
 
   // Search
-  search: (q: string) => request<SpotifySearchResults>(`/search?q=${encodeURIComponent(q)}`),
+  search: (q: string) =>
+    request<{ results: YouTubeSearchResult[] }>(`/search?q=${encodeURIComponent(q)}`),
 };
 
 // Types
@@ -94,73 +95,48 @@ export interface AuditLogEntry {
   ipAddress: string | null;
 }
 
-export interface SpotifyStatus {
-  connected: boolean;
-  accountLabel?: string;
-  spotifyUserId?: string;
-  tokenExpiresAt?: string;
+export interface PlayerState {
+  videoId: string | null;
+  title: string | null;
+  channelTitle: string | null;
+  thumbnailUrl: string | null;
+  durationMs: number;
+  positionMs: number;
+  isPlaying: boolean;
+  volumePercent: number;
+  piConnected: boolean;
 }
 
-export interface SpotifyPlayerState {
-  is_playing: boolean;
-  item?: {
-    name: string;
-    uri: string;
-    artists: { name: string }[];
-    album: {
-      name: string;
-      images: { url: string; width: number; height: number }[];
-    };
-    duration_ms: number;
-  };
-  progress_ms?: number;
-  device?: {
-    name: string;
-    volume_percent: number;
-  };
-}
-
-export interface SpotifyQueue {
-  currently_playing: SpotifyPlayerState["item"] | null;
-  queue: SpotifyPlayerState["item"][];
-}
-
-export interface SpotifyDevice {
+export interface QueueItem {
   id: string;
-  name: string;
-  type: string;
-  is_active: boolean;
-  volume_percent: number | null;
+  videoId: string;
+  title: string;
+  channelTitle: string;
+  thumbnailUrl: string;
+  durationSec: number;
+  addedByUsername: string | null;
+  createdAt: string;
 }
 
-export interface SpotifySearchResults {
-  tracks?: { items: SpotifyPlayerState["item"][] };
-  artists?: { items: { name: string; id: string; images: { url: string }[] }[] };
-  albums?: { items: { name: string; id: string; images: { url: string }[] }[] };
+export interface QueueResponse {
+  currentlyPlaying: PlayerState;
+  queue: QueueItem[];
 }
 
-export interface SpotifyTrack {
-  id?: string;
-  name: string;
-  uri: string;
-  artists: { id?: string; name: string }[];
-  album: {
-    id?: string;
-    name: string;
-    images: { url: string; width?: number; height?: number }[];
-  };
+export interface RecentlyPlayedItem {
+  id: string;
+  videoId: string;
+  title: string;
+  channelTitle: string;
+  thumbnailUrl: string;
+  durationSec: number;
+  playedAt: string;
 }
 
-export interface SpotifyRecentlyPlayed {
-  requiresReconnect?: boolean;
-  error?: string;
-  items: Array<{
-    played_at: string;
-    track: SpotifyTrack;
-  }>;
-}
-
-export interface SpotifyRecommendations {
-  source: "recommendations" | "new_releases";
-  tracks: Array<SpotifyTrack | { id?: string; name: string; images?: { url: string }[]; artists?: { name: string }[]; uri?: string }>;
+export interface YouTubeSearchResult {
+  videoId: string;
+  title: string;
+  channelTitle: string;
+  thumbnailUrl: string;
+  durationSec: number;
 }

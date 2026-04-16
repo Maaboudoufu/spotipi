@@ -1,16 +1,16 @@
 module.exports = {
   apps: [
     {
-      name: "spotipi-backend",
+      name: "spotipi-youtube-backend",
       script: "backend/dist/index.js",
-      cwd: "/home/ubuntu/websites/spotipi",
+      cwd: "/home/ubuntu/websites/spotipi-youtube",
       interpreter: "/home/ubuntu/.nvm/versions/node/v20.20.1/bin/node",
       kill_timeout: 3000,
       restart_delay: 3000,
       max_restarts: 5,
       env: {
         NODE_ENV: "production",
-        PORT: 3002,
+        PORT: 3003,
       },
     },
   ],

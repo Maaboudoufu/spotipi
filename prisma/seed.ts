@@ -58,6 +58,13 @@ async function main() {
     create: { userId: dj.id, roleId: djRole.id },
   });
 
+  // Ensure PlayerState singleton row exists
+  await prisma.playerState.upsert({
+    where: { id: "current" },
+    update: {},
+    create: { id: "current" },
+  });
+
   console.log("Seed complete: admin/admin123, dj/dj123");
 }
 

@@ -1,245 +1,246 @@
 import { Router, Request, Response } from "express";
 import { requireAuth, requireRole } from "../middleware/auth";
-import { spotifyApi, ensureDevice } from "../modules/spotify/service";
+import { prisma } from "../db/client";
 import { logAudit } from "../modules/audit/service";
+import { getVideoDetails } from "../modules/youtube/service";
+import {
+  clearNowPlaying,
+  getState,
+  setNowPlaying,
+  updateState,
+} from "../modules/player/state";
+import {
+  enqueue,
+  enqueueFront,
+  listQueue,
+  popNext,
+  removeQueueItem,
+} from "../modules/player/queue";
+import { isPiConnected, sendCommand } from "../modules/pi/bridge";
+import { advanceToNext } from "../modules/pi/events";
 
 const router = Router();
 
 router.use(requireAuth);
 
-router.get("/devices", async (_req: Request, res: Response) => {
-  try {
-    const data = (await spotifyApi("/me/player/devices")) as {
-      devices: Array<{
-        id: string;
-        name: string;
-        type: string;
-        is_active: boolean;
-        volume_percent: number | null;
-      }>;
-    };
-    res.json({ devices: data?.devices || [] });
-  } catch (err: any) {
-    res.status(502).json({ error: err.message });
-  }
-});
+function clientIp(req: Request): string | undefined {
+  return Array.isArray(req.ip) ? req.ip[0] : req.ip;
+}
 
-router.put("/transfer", requireRole("admin", "dj"), async (req: Request, res: Response) => {
-  const { deviceId } = req.body;
-  if (!deviceId) {
-    res.status(400).json({ error: "Device ID required" });
-    return;
-  }
-  try {
-    await spotifyApi("/me/player", {
-      method: "PUT",
-      body: JSON.stringify({ device_ids: [deviceId], play: true }),
-    });
-    await logAudit({
-      actorUserId: req.currentUser!.id,
-      action: "device_transfer",
-      metadata: { deviceId },
-      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
-    });
-    res.json({ ok: true });
-  } catch (err: any) {
-    res.status(502).json({ error: err.message });
-  }
-});
+async function resolveVideo(videoId: string) {
+  const details = await getVideoDetails([videoId]);
+  if (details.length === 0) throw new Error(`Video not found: ${videoId}`);
+  return details[0];
+}
 
-router.put("/volume", requireRole("admin", "dj"), async (req: Request, res: Response) => {
-  const rawVolume = req.body?.volumePercent;
-  const volumePercent = Number(rawVolume);
-  if (!Number.isFinite(volumePercent) || volumePercent < 0 || volumePercent > 100) {
-    res.status(400).json({ error: "volumePercent must be between 0 and 100" });
-    return;
-  }
-
-  try {
-    await ensureDevice();
-    await spotifyApi(`/me/player/volume?volume_percent=${Math.round(volumePercent)}`, {
-      method: "PUT",
-    });
-    await logAudit({
-      actorUserId: req.currentUser!.id,
-      action: "volume_set",
-      metadata: { volumePercent: Math.round(volumePercent) },
-      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
-    });
-    res.json({ ok: true });
-  } catch (err: any) {
-    res.status(502).json({ error: err.message });
-  }
-});
+async function startPlaying(videoId: string) {
+  const video = await resolveVideo(videoId);
+  await setNowPlaying(video);
+  const state = await getState();
+  sendCommand({
+    type: "load_and_play",
+    videoId: video.videoId,
+    volumePercent: state.volumePercent,
+  });
+  return video;
+}
 
 router.get("/state", async (_req: Request, res: Response) => {
-  try {
-    const state = await spotifyApi("/me/player");
-    res.json(state || { is_playing: false });
-  } catch (err: any) {
-    res.status(502).json({ error: err.message });
+  const state = await getState();
+  res.json(state);
+});
+
+router.get("/queue", async (_req: Request, res: Response) => {
+  const [state, queue] = await Promise.all([getState(), listQueue()]);
+  res.json({ currentlyPlaying: state, queue });
+});
+
+router.post("/queue", requireRole("admin", "dj"), async (req: Request, res: Response) => {
+  const videoId = typeof req.body?.videoId === "string" ? req.body.videoId : "";
+  if (!videoId) {
+    res.status(400).json({ error: "videoId required" });
+    return;
   }
+  try {
+    const video = await resolveVideo(videoId);
+    const item = await enqueue(video, req.currentUser!.id);
+    await logAudit({
+      actorUserId: req.currentUser!.id,
+      action: "queue_add",
+      metadata: { videoId: video.videoId, title: video.title },
+      ipAddress: clientIp(req),
+    });
+
+    // Auto-play if nothing is currently playing and the Pi is connected
+    const state = await getState();
+    if (!state.videoId && isPiConnected()) {
+      const next = await popNext();
+      if (next) {
+        await setNowPlaying({
+          videoId: next.videoId,
+          title: next.title,
+          channelTitle: next.channelTitle,
+          thumbnailUrl: next.thumbnailUrl,
+          durationSec: next.durationSec,
+        });
+        sendCommand({
+          type: "load_and_play",
+          videoId: next.videoId,
+          volumePercent: state.volumePercent,
+        });
+      }
+    }
+
+    res.json({ item });
+  } catch (err: any) {
+    res.status(502).json({ error: err?.message || "Failed to enqueue" });
+  }
+});
+
+router.delete("/queue/:id", requireRole("admin", "dj"), async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const removed = await removeQueueItem(id);
+  if (!removed) {
+    res.status(404).json({ error: "Queue item not found" });
+    return;
+  }
+  await logAudit({
+    actorUserId: req.currentUser!.id,
+    action: "queue_remove",
+    targetType: "queue_item",
+    targetId: id,
+    ipAddress: clientIp(req),
+  });
+  res.json({ ok: true });
 });
 
 router.post("/play", requireRole("admin", "dj"), async (req: Request, res: Response) => {
+  const videoId = typeof req.body?.videoId === "string" ? req.body.videoId : "";
   try {
-    await ensureDevice();
-    const body = req.body.uri ? { uris: [req.body.uri] } : undefined;
-    await spotifyApi("/me/player/play", {
-      method: "PUT",
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    await logAudit({
-      actorUserId: req.currentUser!.id,
-      action: "play",
-      metadata: req.body.uri ? { uri: req.body.uri } : undefined,
-      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
-    });
+    if (!isPiConnected()) {
+      res.status(503).json({ error: "Pi not connected" });
+      return;
+    }
+    if (videoId) {
+      const video = await startPlaying(videoId);
+      await logAudit({
+        actorUserId: req.currentUser!.id,
+        action: "play",
+        metadata: { videoId: video.videoId, title: video.title },
+        ipAddress: clientIp(req),
+      });
+    } else {
+      sendCommand({ type: "resume" });
+      await updateState({ isPlaying: true });
+      await logAudit({
+        actorUserId: req.currentUser!.id,
+        action: "play",
+        ipAddress: clientIp(req),
+      });
+    }
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(502).json({ error: err.message });
+    res.status(502).json({ error: err?.message || "Failed to play" });
   }
 });
 
 router.post("/pause", requireRole("admin", "dj"), async (req: Request, res: Response) => {
-  try {
-    await spotifyApi("/me/player/pause", { method: "PUT" });
-    await logAudit({
-      actorUserId: req.currentUser!.id,
-      action: "pause",
-      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
-    });
-    res.json({ ok: true });
-  } catch (err: any) {
-    res.status(502).json({ error: err.message });
+  if (!isPiConnected()) {
+    res.status(503).json({ error: "Pi not connected" });
+    return;
   }
+  sendCommand({ type: "pause" });
+  await updateState({ isPlaying: false });
+  await logAudit({
+    actorUserId: req.currentUser!.id,
+    action: "pause",
+    ipAddress: clientIp(req),
+  });
+  res.json({ ok: true });
 });
 
 router.post("/next", requireRole("admin", "dj"), async (req: Request, res: Response) => {
-  try {
-    await ensureDevice();
-    await spotifyApi("/me/player/next", { method: "POST" });
-    await logAudit({
-      actorUserId: req.currentUser!.id,
-      action: "skip_next",
-      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
-    });
-    res.json({ ok: true });
-  } catch (err: any) {
-    res.status(502).json({ error: err.message });
+  if (!isPiConnected()) {
+    res.status(503).json({ error: "Pi not connected" });
+    return;
   }
+  const advanced = await advanceToNext();
+  await logAudit({
+    actorUserId: req.currentUser!.id,
+    action: "skip_next",
+    ipAddress: clientIp(req),
+  });
+  res.json({ ok: true, advanced });
 });
 
 router.post("/previous", requireRole("admin", "dj"), async (req: Request, res: Response) => {
-  try {
-    await ensureDevice();
-    await spotifyApi("/me/player/previous", { method: "POST" });
-    await logAudit({
-      actorUserId: req.currentUser!.id,
-      action: "skip_previous",
-      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
-    });
-    res.json({ ok: true });
-  } catch (err: any) {
-    res.status(502).json({ error: err.message });
-  }
-});
-
-router.post("/queue", requireRole("admin", "dj"), async (req: Request, res: Response) => {
-  const { uri } = req.body;
-  if (!uri) {
-    res.status(400).json({ error: "Track URI required" });
+  if (!isPiConnected()) {
+    res.status(503).json({ error: "Pi not connected" });
     return;
   }
-  try {
-    await ensureDevice();
-    await spotifyApi(`/me/player/queue?uri=${encodeURIComponent(uri)}`, { method: "POST" });
-    await logAudit({
-      actorUserId: req.currentUser!.id,
-      action: "queue_add",
-      metadata: { uri },
-      ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
-    });
-    res.json({ ok: true });
-  } catch (err: any) {
-    res.status(502).json({ error: err.message });
+  const last = await prisma.recentlyPlayed.findFirst({
+    orderBy: { playedAt: "desc" },
+  });
+  if (!last) {
+    res.status(404).json({ error: "Nothing to go back to" });
+    return;
   }
+
+  await enqueueFront(
+    {
+      videoId: last.videoId,
+      title: last.title,
+      channelTitle: last.channelTitle,
+      thumbnailUrl: last.thumbnailUrl,
+      durationSec: last.durationSec,
+    },
+    req.currentUser!.id,
+  );
+  await prisma.recentlyPlayed.delete({ where: { id: last.id } });
+  await advanceToNext();
+
+  await logAudit({
+    actorUserId: req.currentUser!.id,
+    action: "skip_previous",
+    metadata: { videoId: last.videoId, title: last.title },
+    ipAddress: clientIp(req),
+  });
+  res.json({ ok: true });
 });
 
-router.get("/queue", async (_req: Request, res: Response) => {
-  try {
-    const queue = await spotifyApi("/me/player/queue");
-    res.json(queue);
-  } catch (err: any) {
-    res.status(502).json({ error: err.message });
+router.put("/volume", requireRole("admin", "dj"), async (req: Request, res: Response) => {
+  const raw = Number(req.body?.volumePercent);
+  if (!Number.isFinite(raw) || raw < 0 || raw > 100) {
+    res.status(400).json({ error: "volumePercent must be between 0 and 100" });
+    return;
   }
+  const volumePercent = Math.round(raw);
+  await updateState({ volumePercent });
+  sendCommand({ type: "volume", volumePercent });
+  await logAudit({
+    actorUserId: req.currentUser!.id,
+    action: "volume_set",
+    metadata: { volumePercent },
+    ipAddress: clientIp(req),
+  });
+  res.json({ ok: true });
 });
 
 router.get("/recently-played", async (_req: Request, res: Response) => {
-  try {
-    const data = await spotifyApi("/me/player/recently-played?limit=20");
-    res.json(data || { items: [] });
-  } catch (err: any) {
-    const message = String(err?.message || "Failed to load recently played");
-    if (message.includes("403") || message.toLowerCase().includes("insufficient") || message.toLowerCase().includes("scope")) {
-      res.json({ items: [], requiresReconnect: true, error: message });
-      return;
-    }
-    res.status(502).json({ error: message });
-  }
-});
-
-router.get("/recommendations", async (_req: Request, res: Response) => {
-  try {
-    let recent: {
-      items?: Array<{ track?: { id?: string; artists?: Array<{ id?: string }> } }>;
-    } | null = null;
-
-    try {
-      recent = (await spotifyApi("/me/player/recently-played?limit=15")) as {
-        items?: Array<{ track?: { id?: string; artists?: Array<{ id?: string }> } }>;
-      };
-    } catch {
-      recent = null;
-    }
-
-    const trackSeeds = Array.from(
-      new Set(
-        (recent?.items || [])
-          .map((item) => item.track?.id)
-          .filter((id): id is string => Boolean(id))
-      )
-    ).slice(0, 3);
-
-    const artistSeeds = Array.from(
-      new Set(
-        (recent?.items || [])
-          .flatMap((item) => item.track?.artists || [])
-          .map((artist) => artist.id)
-          .filter((id): id is string => Boolean(id))
-      )
-    ).slice(0, 2);
-
-    const params = new URLSearchParams({
-      limit: "20",
-      seed_tracks: trackSeeds.join(","),
-      seed_artists: artistSeeds.join(","),
-    });
-
-    if (!trackSeeds.length && !artistSeeds.length) {
-      const fallback = await spotifyApi("/browse/new-releases?limit=20");
-      res.json({
-        source: "new_releases",
-        tracks: (fallback as any)?.albums?.items || [],
-      });
-      return;
-    }
-
-    const recommendations = await spotifyApi(`/recommendations?${params.toString()}`);
-    res.json({ source: "recommendations", ...(recommendations || { tracks: [] }) });
-  } catch (err: any) {
-    res.status(502).json({ error: err.message });
-  }
+  const rows = await prisma.recentlyPlayed.findMany({
+    orderBy: { playedAt: "desc" },
+    take: 20,
+  });
+  const items = rows.map((row) => ({
+    id: row.id,
+    videoId: row.videoId,
+    title: row.title,
+    channelTitle: row.channelTitle,
+    thumbnailUrl: row.thumbnailUrl,
+    durationSec: row.durationSec,
+    playedAt: row.playedAt.toISOString(),
+  }));
+  res.json({ items });
 });
 
 export default router;

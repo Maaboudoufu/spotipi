@@ -41,7 +41,6 @@ export default function Layout({ children }: { children: ReactNode }) {
               {navLink("/app", "Player")}
               {hasRole("admin") && navLink("/admin/users", "Users")}
               {hasRole("admin") && navLink("/admin/logs", "Logs")}
-              {hasRole("admin") && navLink("/admin/spotify", "Spotify")}
             </div>
 
             {/* Right side */}
@@ -67,7 +66,6 @@ export default function Layout({ children }: { children: ReactNode }) {
           {navLink("/app", "Player")}
           {hasRole("admin") && navLink("/admin/users", "Users")}
           {hasRole("admin") && navLink("/admin/logs", "Logs")}
-          {hasRole("admin") && navLink("/admin/spotify", "Spotify")}
         </div>
       </nav>
 

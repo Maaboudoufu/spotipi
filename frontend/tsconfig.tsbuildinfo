@@ -1,1 +1,1 @@
-{"root":["./src/main.tsx","./src/app/App.tsx","./src/components/Layout.tsx","./src/lib/api.ts","./src/lib/auth.tsx","./src/pages/LoginPage.tsx","./src/pages/LogsPage.tsx","./src/pages/PlayerPage.tsx","./src/pages/SpotifyAdminPage.tsx","./src/pages/UsersPage.tsx"],"version":"5.9.3"}
+{"root":["./src/main.tsx","./src/app/App.tsx","./src/components/Layout.tsx","./src/lib/api.ts","./src/lib/auth.tsx","./src/pages/LoginPage.tsx","./src/pages/LogsPage.tsx","./src/pages/PlayerPage.tsx","./src/pages/UsersPage.tsx"],"version":"5.9.3"}

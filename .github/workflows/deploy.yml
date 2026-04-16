@@ -3,10 +3,10 @@ name: CI/CD Pipeline
 on:
   push:
     branches:
-      - main
+      - youtube
 
 jobs:
-  deploy:
+  deploy-oracle:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,11 +23,49 @@ jobs:
           script: |
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-            cd ~/websites/spotipi
-            git checkout -- package-lock.json
-            git pull origin main
+            if [ ! -d ~/websites/spotipi-youtube ]; then
+              git clone -b youtube https://github.com/Maaboudoufu/spotipi.git ~/websites/spotipi-youtube
+            fi
+            cd ~/websites/spotipi-youtube
+            git checkout -- package-lock.json 2>/dev/null || true
+            git fetch origin
+            git checkout youtube
+            git pull origin youtube
             npm install
             npx -w backend prisma generate --schema=../prisma/schema.prisma
+            npx -w backend prisma db push --schema=../prisma/schema.prisma --accept-data-loss
+            npm --workspace=backend run db:seed || true
             npm run build --workspace=backend
             npm run build --workspace=frontend
             pm2 restart ecosystem.config.cjs || pm2 start ecosystem.config.cjs
+
+  deploy-pi:
+    runs-on: [self-hosted, pi]
+    needs: deploy-oracle
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build pi-daemon
+        working-directory: pi-daemon
+        run: |
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+          npm install
+          npm run build
+
+      - name: Sync built daemon into deploy location
+        run: |
+          mkdir -p /home/pi/spotipi/pi-daemon
+          rsync -a --delete \
+            --exclude node_modules \
+            --exclude .env \
+            pi-daemon/ /home/pi/spotipi/pi-daemon/
+          cd /home/pi/spotipi/pi-daemon
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+          npm install --omit=dev
+
+      - name: Restart service
+        run: sudo systemctl restart spotipi-pi

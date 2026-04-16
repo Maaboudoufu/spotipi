@@ -1,4 +1,5 @@
 import express from "express";
+import http from "http";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
@@ -8,9 +9,12 @@ import { config } from "./config";
 import authRoutes from "./routes/auth";
 import userRoutes from "./routes/users";
 import auditRoutes from "./routes/audit";
-import spotifyRoutes from "./routes/spotify";
 import playerRoutes from "./routes/player";
 import searchRoutes from "./routes/search";
+
+import { attachPiBridge } from "./modules/pi/bridge";
+// Side-effect import — registers Pi event handlers on load
+import "./modules/pi/events";
 
 const app = express();
 
@@ -35,7 +39,6 @@ app.use("/api/auth/login", loginLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/audit-logs", auditRoutes);
-app.use("/api/spotify", spotifyRoutes);
 app.use("/api/player", playerRoutes);
 app.use("/api/search", searchRoutes);
 
@@ -50,6 +53,10 @@ app.get("*", (_req, res) => {
   res.sendFile(path.join(frontendDist, "index.html"));
 });
 
-app.listen(config.port, () => {
+const server = http.createServer(app);
+attachPiBridge(server);
+
+server.listen(config.port, () => {
   console.log(`Backend running on http://localhost:${config.port}`);
+  console.log(`Pi bridge listening on ws path ${config.pi.wsPath}`);
 });

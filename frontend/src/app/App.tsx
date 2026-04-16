@@ -5,7 +5,6 @@ import LoginPage from "../pages/LoginPage";
 import PlayerPage from "../pages/PlayerPage";
 import UsersPage from "../pages/UsersPage";
 import LogsPage from "../pages/LogsPage";
-import SpotifyAdminPage from "../pages/SpotifyAdminPage";
 
 function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles?: string[] }) {
   const { user, loading } = useAuth();
@@ -64,14 +63,6 @@ export default function App() {
         element={
           <ProtectedRoute roles={["admin"]}>
             <Layout><LogsPage /></Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/spotify"
-        element={
-          <ProtectedRoute roles={["admin"]}>
-            <Layout><SpotifyAdminPage /></Layout>
           </ProtectedRoute>
         }
       />
