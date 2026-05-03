@@ -115,7 +115,7 @@ pm2 start ecosystem.config.cjs
 
 ```
 spotipi/
-├── frontend/          # React + Vite app
+├── frontend/          # Rea c t + Vite app
 │   └── src/
 │       ├── pages/     # Page components
 │       ├── components/# Reusable UI components
